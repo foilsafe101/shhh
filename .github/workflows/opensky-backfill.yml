@@ -44,6 +44,12 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          # A run that waited in the concurrency queue would otherwise check
+          # out the commit main was at when the run was *created*, which is
+          # older than the previous run's push, and the final push would
+          # conflict. Naming the branch checks out its current tip.
+          ref: ${{ github.ref_name }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -84,6 +90,22 @@ jobs:
                   "OAuth and this job will hang."
               )
           print(f"Credentials resolved for user: {config.trino_username}")
+
+          # A valid login is not enough: Trino also has to authorise the
+          # account to run queries. Prove it with a trivial query here, so a
+          # revoked or wrong account fails in seconds instead of after hours
+          # of refused queries.
+          from pyopensky.trino import Trino
+          try:
+              Trino().query("SELECT 1 AS ok")
+          except Exception as e:
+              sys.exit(
+                  "ERROR: the OpenSky account authenticated but Trino refused "
+                  f"to run a query: {e}\n"
+                  "Check that OPENSKY_USERNAME / OPENSKY_PASSWORD belong to the "
+                  "account that was granted Trino access."
+              )
+          print("Trino test query succeeded")
           PY
 
       - name: Check whether any slots are pending
