@@ -1,6 +1,6 @@
 # Shhh — Project Status
 
-**Last updated:** 2026-08-27
+**Last updated:** 2026-10-11
 
 ## What it is
 Web map identifying locations with no audible anthropogenic sound (no flights, no roads, no rail). Leaflet frontend, flight data from OpenSky Trino, quiet-zone overlay computed from flight + road/rail proximity.
@@ -35,6 +35,32 @@ Two things contributed:
 - **Otherwise the 187,172 slots need re-running**, which means resetting `query_progress_paths.json` to the slots that actually have data. The backfill workflow will then collect them like any other pending slot — no code change needed, just a different progress file.
 
 The `docs/status.html` progress bar reads from the same counter, so it currently overstates coverage too.
+
+## ⚠️ Open issue (2026-10-11): Trino refuses queries from GitHub Actions
+
+The workflow was merged and test-run on 2026-10-11. The runner authenticates
+with the `OPENSKY_USERNAME` / `OPENSKY_PASSWORD` secrets, but every query is
+refused by Trino with `PERMISSION_DENIED: Access Denied: Cannot execute query`.
+So the account behind the secrets is not authorised to run queries: either the
+secrets hold a different OpenSky account than the one Martin Strohmeier
+approved (`mtribe@sva.edu`), or that approval has lapsed since May.
+
+The workflow is **disabled** in the Actions tab until this is resolved. To check
+which it is, run a query on the Mac with the saved browser login:
+
+```
+cd /Users/Shared/shhh && .venv/bin/python -c "from pyopensky.trino import Trino; print(Trino().query('SELECT 1 AS ok'))"
+```
+
+If that works, re-enter the two secrets with that account's credentials and
+re-enable the workflow. If it is refused too, access has to be re-requested
+from OpenSky.
+
+Before the fix below, a refused query was recorded as a completed slot with no
+data; the cancelled first run pushed 150 such slots, which have been reverted.
+`query_opensky_paths.py` now leaves a refused slot pending and aborts after
+five consecutive errors, and the workflow preflight runs a test query so a
+refused account fails in seconds.
 
 ## How the backfill runs now
 `.github/workflows/opensky-backfill.yml` — scheduled GitHub Actions, no laptop involved.

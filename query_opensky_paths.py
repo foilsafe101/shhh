@@ -19,6 +19,7 @@ Usage:
 import argparse
 import gzip
 import json
+import sys
 import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -87,6 +88,7 @@ LAND_REGIONS = [
 
 MIN_ALT_M         = 300
 MAX_ROWS_PER_SLOT = 3000
+MAX_CONSECUTIVE_ERRORS = 5   # abort the run rather than burn hours on a dead connection
 PAUSE_SECONDS     = 0
 MAX_PATH_GAP_S    = 1800   # 30 min — must exceed SAMPLE_INTERVAL_MINUTES*60 to merge across slots
 RDP_TOLERANCE     = 0.1    # ~11km at equator
@@ -265,8 +267,10 @@ def query_slot(opensky, slot):
             })
         return results
     except Exception as e:
+        # None (not []) so the caller can tell a failed query from an empty one
+        # and leave the slot pending instead of recording it as done.
         print(f"    Query error: {e}")
-        return []
+        return None
 
 
 def main():
@@ -337,6 +341,7 @@ def main():
     current_day = None
     accumulator = None
     new_tracks  = 0
+    consecutive_errors = 0
 
     def flush_day():
         nonlocal new_tracks
@@ -358,6 +363,15 @@ def main():
         print(f"  {slot['slot_dt']}  {region_name}...", end=" ", flush=True)
 
         positions = query_slot(opensky, slot)
+        if positions is None:
+            consecutive_errors += 1
+            print(f"    slot left pending ({consecutive_errors} consecutive errors)")
+            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                print(f"\nAborting: {consecutive_errors} consecutive query errors. "
+                      "Nothing was marked complete for them.")
+                break
+            continue
+        consecutive_errors = 0
         print(f"{len(positions)} aircraft")
 
         for p in positions:
@@ -393,6 +407,8 @@ def main():
     save_flights(flight_data)
     print(f"\nDone. Added {new_tracks:,} new path segments.")
     print(f"Total tracks: {len(flight_data['tracks']):,}")
+    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+        sys.exit(2)
 
 
 if __name__ == "__main__":
