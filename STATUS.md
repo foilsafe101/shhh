@@ -1,6 +1,6 @@
 # Shhh — Project Status
 
-**Last updated:** 2026-10-11
+**Last updated:** 2026-11-14
 
 ## What it is
 Web map identifying locations with no audible anthropogenic sound (no flights, no roads, no rail). Leaflet frontend, flight data from OpenSky Trino, quiet-zone overlay computed from flight + road/rail proximity.
@@ -9,32 +9,29 @@ Web map identifying locations with no audible anthropogenic sound (no flights, n
 - **Live:** https://foilsafe101.github.io/shhh/ (GitHub Pages from `/docs`)
 - **Audience:** Mark Tribe, SVA faculty NYC, field-recording scouting (Northeast US priority)
 
-## ⚠️ Open issue: recorded progress does not match collected data
+## Recovered Air dataset (2026-11-14)
 
-**The progress counter says 84% done. The repo only holds flight data for about 22% of the schedule.**
+The previously unpushed MacBook Air dataset has been recovered without changing
+or deleting the original checkout. The October handoff understated the track
+count by a factor of ten: the current file contains **3,339,319 tracks**, not
+339,319, versus 238,339 in the previous published version.
 
-Every track in the repo — across all three data files — falls between **2025-01-06 and 2025-03-07**. That is the first two sample weeks plus five days of the third. But `query_progress_paths.json` marks slots complete all the way through 2025-11-03.
+- The canonical progress file contains exactly the 302,400 expected unique
+  schedule keys, with no missing or unexpected keys.
+- The main gzip file is 54,146,799 bytes, below GitHub's 100 MB limit.
+- Both legacy gzip files are preserved byte-for-byte.
+- All 238,339 previously published main-file records are retained.
+- Tracks occur in every sampled month, from January 6 to December 7, 2025.
+  All 8,247,999 coordinates are finite and within latitude/longitude bounds;
+  no track has an empty path.
+- The overlay has been regenerated using the current main-branch code and
+  approved 0.145° flight threshold / 0.1° resolution, including roads and rails.
+- Updated progress is 100% of the recorded sampling schedule, not proof that
+  every query returned aircraft or that every location is acoustically quiet.
+  Historical query logs are unavailable; collection completeness cannot be
+  independently reconstructed for empty slots.
 
-| | slots |
-|---|---:|
-| Marked complete, data present in repo | 67,230 |
-| Marked complete, **no data in repo** | 187,172 |
-| Never run | 47,998 |
-| **Still to collect for a complete dataset** | **235,170** |
-
-So the real remaining work is roughly **258 hours**, not the ~53 hours the counter implies.
-
-Two things contributed:
-
-1. `run_worker.sh` staged `docs/flights_*.json`. That glob matches neither `flights.json.gz` nor `flights_0.json.gz` — no flight data file has an underscore *and* a bare `.json` extension. So every batch commit pushed the updated progress file while the flight data stayed behind. `docs/flights.json.gz` has not changed in git since the repo's initial import.
-2. The canonical progress file was seeded from the 12-minute-aligned subset of the older 3-minute worker progress (`canonical ∩ (worker0 ∪ worker1)` = 41,602, matching the 2026-05-05 figure in CONTEXT.md). That seed counted slots as done whose tracks live in the legacy worker files, which themselves only cover 2025-01-07 to 2025-01-08.
-
-**This has not been fixed, because the fix is a judgement call:**
-
-- **If Mark's Mac still has the working copy** at `/Users/Shared/shhh/docs/flights.json.gz`, the missing data may simply never have been committed. Check `meta.slots_done` inside it — if it reads ~254,402 rather than 41,802, the data is intact and just needs pushing. This is by far the cheapest outcome and worth checking before anything else.
-- **Otherwise the 187,172 slots need re-running**, which means resetting `query_progress_paths.json` to the slots that actually have data. The backfill workflow will then collect them like any other pending slot — no code change needed, just a different progress file.
-
-The `docs/status.html` progress bar reads from the same counter, so it currently overstates coverage too.
+No new OpenSky queries were issued. The backfill workflow remains disabled.
 
 ## ⚠️ Open issue (2026-10-11): Trino refuses queries from GitHub Actions
 
@@ -97,10 +94,13 @@ refused account fails in seconds.
 
 Both of the changes that were gated on 80% coverage are now applied. At 0.1° the grid is 3600×2548 = 9.2M pixels — a 6.25× pixel increase that produces a 1.7 MB PNG in about 70 seconds using ~1.4 GB RAM. Well within a runner's budget, and small enough to serve.
 
-Note that the overlay is still computed from the incomplete dataset described above, so the quiet areas it shows are optimistic — fewer flights on file means more of the map looks quiet than really is.
+The overlay now uses the recovered Air dataset. Sparse receiver coverage and the sampling design still limit what absence of recorded flights can establish.
 
 ## Data size headroom
-GitHub's hard limit is 100 MB per file. `docs/flights.json.gz` is currently ~6 MB holding ~238k tracks. The data runs at roughly 5.7 tracks per slot, so a genuinely complete 302,400-slot dataset projects to ~1.7M tracks and ~43 MB gzipped — under the limit, but large for a browser to download in one request. If it gets uncomfortable, splitting by region or sample week is the natural next step. The workflow warns at 50 MB and fails at 90 MB.
+The recovered main gzip file is 54.1 MB (3,339,319 tracks). This is below
+GitHub's 100 MB file limit, but substantial for a browser download. The existing
+workflow warns at 50 MB and fails at 90 MB. Regional or sample-week splitting
+remains a possible future performance improvement.
 
 ## Architecture decisions / declined options
 - **Cloud VM**: declined earlier in favour of Mark's Mac; superseded by GitHub Actions (free for public repos)
@@ -108,6 +108,6 @@ GitHub's hard limit is 100 MB per file. `docs/flights.json.gz` is currently ~6 M
 - **PMTiles tile-based rendering**: deferred — revisit if rendering slows again
 
 ## Still open
-- Resolve the progress/data mismatch above (check the Mac first)
+- Historical empty-query outcomes are not independently auditable without logs
 - `fetch_flights.py` writes `docs/flights.json`, which is in `.gitignore`, so the nightly workflow's `git add` cannot stage it. Worth confirming whether that job does anything today.
 - Altitude-dependent audible radius — low-flying aircraft carry a much smaller radius than jets
